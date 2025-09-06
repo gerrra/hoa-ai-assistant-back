@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Список документов - HOA AI Assistant</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📚 Список документов</h1>
+            <p>Все загруженные документы в базе знаний HOA</p>
+        </div>
+        
+        <div class="card">
+            <div class="nav">
+                <a href="/admin" class="btn btn-secondary">← Назад в админ-панель</a>
+                <a href="/admin/upload" class="btn">📤 Загрузить новый</a>
+            </div>
+        </div>
+        
+        {% if error %}
+        <div class="card">
+            <div class="error">{{ error }}</div>
+        </div>
+        {% endif %}
+        
+        <div class="card">
+            <h2>📋 Документы ({{ documents|length }})</h2>
+            
+            {% if documents %}
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Название</th>
+                        <th>Тип</th>
+                        <th>Видимость</th>
+                        <th>Дата создания</th>
+                        <th>Чанки</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td>{{ doc[0] }}</td>
+                        <td>{{ doc[1] }}</td>
+                        <td>{{ doc[2] }}</td>
+                        <td>
+                            <span class="badge badge-{{ doc[4] }}">
+                                {{ doc[4] }}
+                            </span>
+                        </td>
+                        <td>{{ doc[3].strftime('%Y-%m-%d %H:%M') if doc[3] else 'N/A' }}</td>
+                        <td>{{ doc[5] }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--muted); text-align: center; padding: 40px;">
+                📭 Документы не найдены. <a href="/admin/upload" style="color: var(--accent);">Загрузите первый документ</a>
+            </p>
+            {% endif %}
+        </div>
+        
+        <div class="card">
+            <h3>ℹ️ Статистика</h3>
+            <p><strong>Всего документов:</strong> {{ documents|length }}</p>
+            <p><strong>Всего чанков:</strong> {{ documents|sum(attribute=5) if documents else 0 }}</p>
+            <p><strong>Последнее обновление:</strong> {{ documents[0][3].strftime('%Y-%m-%d %H:%M') if documents and documents[0][3] else 'N/A' }}</p>
+        </div>
+    </div>
+</body>
+</html>

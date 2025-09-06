@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+psycopg[binary]
+pydantic
+pypdf
+tiktoken
+openai
+jinja2
+python-multipart
+python-dotenv
+pgvector>=0.2.5

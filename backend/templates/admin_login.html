@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Вход в админ-панель - HOA AI Assistant</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 Вход в админ-панель</h1>
+            <p>HOA AI Assistant - Административная панель</p>
+        </div>
+        
+        <div class="card">
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            
+            <form method="POST" action="/admin/login">
+                <div class="form-group">
+                    <label for="password">Пароль администратора:</label>
+                    <input type="password" id="password" name="password" required>
+                </div>
+                
+                <button type="submit" class="btn">Войти</button>
+            </form>
+            
+            <p style="margin-top: 20px; color: var(--muted); font-size: 14px;">
+                Пароль настраивается в переменной окружения ADMIN_PASSWORD
+            </p>
+        </div>
+    </div>
+</body>
+</html>

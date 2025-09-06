@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка документа - HOA AI Assistant</title>
+    <link rel="stylesheet" href="/static/admin.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📤 Загрузка документа</h1>
+            <p>Добавьте новый документ в базу знаний HOA</p>
+        </div>
+        
+        <div class="card">
+            <div class="nav">
+                <a href="/admin" class="btn btn-secondary">← Назад в админ-панель</a>
+                <a href="/admin/documents" class="btn btn-secondary">📚 Список документов</a>
+            </div>
+        </div>
+        
+        <div class="card">
+            {% if error %}
+            <div class="error">{{ error }}</div>
+            {% endif %}
+            
+            <form method="POST" action="/admin/upload" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="community_id">ID сообщества:</label>
+                    <input type="number" id="community_id" name="community_id" value="1" min="1" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="title">Название документа:</label>
+                    <input type="text" id="title" name="title" placeholder="Например: CC&R 2024" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="doc_type">Тип документа:</label>
+                    <select id="doc_type" name="doc_type" required>
+                        <option value="">Выберите тип...</option>
+                        <option value="CC&R">CC&R (Правила и ограничения)</option>
+                        <option value="Bylaws">Bylaws (Устав)</option>
+                        <option value="Rules">Rules (Правила)</option>
+                        <option value="Policy">Policy (Политика)</option>
+                        <option value="Guidelines">Guidelines (Руководства)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="visibility">Видимость:</label>
+                    <select id="visibility" name="visibility" required>
+                        <option value="resident">resident (Жители)</option>
+                        <option value="board">board (Правление)</option>
+                        <option value="staff">staff (Персонал)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="file">Файл документа:</label>
+                    <input type="file" id="file" name="file" accept=".pdf,.txt" required>
+                    <small style="color: var(--muted);">Поддерживаются PDF и TXT файлы</small>
+                </div>
+                
+                <button type="submit" class="btn">📤 Загрузить документ</button>
+            </form>
+        </div>
+        
+        <div class="card">
+            <h3>ℹ️ Информация о загрузке</h3>
+            <ul style="color: var(--muted); margin-left: 20px;">
+                <li>Файл будет автоматически обработан и разбит на чанки</li>
+                <li>Для каждого чанка будет создан векторный эмбеддинг</li>
+                <li>Документ станет доступен для поиска через API</li>
+                <li>После загрузки вы будете перенаправлены к списку документов</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>
