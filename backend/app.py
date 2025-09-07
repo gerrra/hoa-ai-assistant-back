@@ -32,14 +32,31 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "changeme")
 # Cookie security settings
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "false").lower() == "true"
 
+def parse_origins(value: str) -> list[str]:
+    """Parse CORS origins from environment variable (JSON array or comma-separated list)"""
+    v = (value or "").strip()
+    if v.startswith("["):
+        try: 
+            return json.loads(v)
+        except Exception: 
+            pass
+    return [x.strip() for x in v.split(",") if x.strip()]
+
 app = FastAPI(
     title="HOA AI Assistant",
     description="AI-powered assistant for Homeowners Association document queries",
     version="1.0.0"
 )
 
-# CORS configuration
-origins = os.getenv("ALLOW_ORIGINS","").split(",") if os.getenv("ALLOW_ORIGINS") else ["*"]
+# Disable redirect_slashes to prevent 307/308 redirects that break CORS preflight
+app.router.redirect_slashes = False
+
+# CORS configuration with robust origins parsing
+origins = parse_origins(os.getenv("CORS_ORIGINS")) or [
+    "https://admin.gerrra.com", "https://app.gerrra.com",
+    "http://localhost:5173", "http://localhost:5174",
+]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
