@@ -19,6 +19,14 @@ jobs:
           test -n "${{ secrets.SSH_USER }}" || { echo "❌ SSH_USER is missing"; exit 1; }
           test -n "${{ secrets.SSH_KEY }}"  || { echo "❌ SSH_KEY is missing";  exit 1; }
 
+      - name: Validate SSH_HOST format
+        run: |
+          h='${{ secrets.SSH_HOST }}'
+          echo "len(host)=$(printf %s "$h" | wc -c)"
+          case "$h" in
+            *@*|*://*) echo "❌ SSH_HOST must be only IP or DNS, no user/protocol"; exit 1;;
+          esac
+
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
