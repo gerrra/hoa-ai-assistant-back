@@ -1,0 +1,36 @@
+# python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.mypy_cache/
+.pytest_cache/
+
+# venv
+.venv/
+venv/
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+
+# build / misc
+dist/
+build/
+.coverage
+*.log
+
+# secrets (НЕ коммитим)
+.env
+.env.*
+!.env.example
+
+# docker
+*.local.yml
+# backups / cache
+*.bak
+*.bak.*
+*.old
