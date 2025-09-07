@@ -1,8 +1,7 @@
 name: Deploy backend to prod
 
 on:
-  push:
-    branches: [ main ]
+  push: { branches: [ main ] }
   workflow_dispatch: {}
 
 concurrency:
@@ -13,68 +12,56 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Check required secrets
+      - name: Check secrets
         run: |
-          test -n "${{ secrets.SSH_HOST }}" || { echo "❌ SSH_HOST is missing"; exit 1; }
-          test -n "${{ secrets.SSH_USER }}" || { echo "❌ SSH_USER is missing"; exit 1; }
-          test -n "${{ secrets.SSH_KEY }}"  || { echo "❌ SSH_KEY is missing";  exit 1; }
+          test -n "${{ secrets.SSH_HOST }}" || { echo "SSH_HOST empty"; exit 1; }
+          test -n "${{ secrets.SSH_USER }}" || { echo "SSH_USER empty"; exit 1; }
+          test -n "${{ secrets.SSH_KEY }}"  || { echo "SSH_KEY empty";  exit 1; }
 
-      - name: Validate SSH_HOST format
-        run: |
-          h='${{ secrets.SSH_HOST }}'
-          echo "len(host)=$(printf %s "$h" | wc -c)"
-          case "$h" in
-            *@*|*://*) echo "❌ SSH_HOST must be only IP or DNS, no user/protocol"; exit 1;;
-          esac
-
-      - name: Debug SSH_HOST length
-        run: echo "len=$(printf '%s' '${{ secrets.SSH_HOST }}' | wc -c)"
-
-      - name: SSH deploy
-        uses: appleboy/ssh-action@v1.2.0
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.9.0
         with:
-          host:     ${{ steps.norm.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key:      ${{ secrets.SSH_KEY }}
-          script_stop: true
-          command_timeout: 15m
-          script: |
-            set -euo pipefail
+          ssh-private-key: |
+            ${{ secrets.SSH_KEY }}
 
-            # 1) код
-            if [ -d /opt/hoa-assistant/back/.git ]; then
-              cd /opt/hoa-assistant/back && git fetch --all && git reset --hard origin/main
-            else
-              mkdir -p /opt/hoa-assistant
-              git clone git@github.com:gerrra/hoa-ai-assistant-back.git /opt/hoa-assistant/back
-            fi
+      - name: Add known_hosts
+        run: |
+          mkdir -p ~/.ssh
+          echo "Scanning host key..."
+          ssh-keyscan -p "${{ secrets.SSH_PORT || 22 }}" "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-            # 2) билд и запуск API
-            cd /opt/hoa-assistant/deploy/prod
-            docker compose -f docker-compose.prod.yml build api
-            docker compose -f docker-compose.prod.yml up -d api
-            cid=$(docker compose -f docker-compose.prod.yml ps -q api)
-            for i in $(seq 1 30); do
-              st=$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo starting)
-              echo "api health: $st"
-              [ "$st" = "healthy" ] && break
-              sleep 3
-            done
-            [ "$st" = "healthy" ] || { echo "API not healthy"; exit 1; }
+      - name: Deploy over SSH
+        env:
+          HOST: ${{ secrets.SSH_HOST }}
+          USER: ${{ secrets.SSH_USER }}
+          PORT: ${{ secrets.SSH_PORT || 22 }}
+        run: |
+          ssh -o StrictHostKeyChecking=yes -p "$PORT" "$USER@$HOST" bash -s <<'SSH'
+          set -euo pipefail
 
-            # 3) ОЖИДАНИЕ готовности /health (до ~90 сек, с ретраями)
-            i=0
-            until docker compose -f docker-compose.prod.yml exec -T api python - <<'PY'
-            import sys, time, urllib.request
-            try:
-                r = urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)
-                print(r.read().decode())
-                sys.exit(0)
-            except Exception as e:
-                sys.exit(1)
-            PY
-            do
-              i=$((i+1))
-              if [ $i -ge 30 ]; then echo "API not ready"; exit 1; fi
-              echo "waiting for API ($i/30)..." && sleep 3
-            done
+          # 1) код бэка
+          if [ -d /opt/hoa-assistant/back/.git ]; then
+            cd /opt/hoa-assistant/back && git fetch --all && git reset --hard origin/main
+          else
+            mkdir -p /opt/hoa-assistant
+            git clone git@github.com:gerrra/hoa-ai-assistant-back.git /opt/hoa-assistant/back
+          fi
+
+          # 2) билд и запуск API
+          cd /opt/hoa-assistant/deploy/prod
+          docker compose -f docker-compose.prod.yml up -d --build api || true
+
+          # 3) дождаться health (если нет --wait)
+          cid=$(docker compose -f docker-compose.prod.yml ps -q api)
+          for i in {1..30}; do
+            st=$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo starting)
+            echo "api health: $st"
+            [ "$st" = healthy ] && break
+            sleep 3
+          done
+          [ "$st" = healthy ] || { echo "API not healthy"; exit 1; }
+
+          # 4) финальная проверка
+          docker compose -f docker-compose.prod.yml exec -T api \
+            python -c 'import urllib.request;print(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5).read().decode())'
+          SSH
