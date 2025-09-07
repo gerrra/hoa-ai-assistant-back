@@ -12,8 +12,8 @@ import psycopg
 from pgvector.psycopg import register_vector
 
 # Import local modules
-from ingest import extract_text, clean_text, chunk_text
-from embed import get_embedding
+from ingest.ingest import extract_text, clean_text, chunk_text
+from ingest.embed import get_embedding
 
 def get_db_connection():
     """Get database connection using environment variables"""

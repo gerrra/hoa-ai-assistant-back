@@ -494,17 +494,23 @@ async def admin_api_upload(
         # Import and call save_document
         from ingest.save import save_document
         
-        result = save_document(
-            community_id=community_id,
-            title=title,
-            doc_type=doc_type,
-            file_path=str(file_path),
-            visibility=visibility
+        # Process document asynchronously to avoid timeout
+        import asyncio
+        result = await asyncio.get_event_loop().run_in_executor(
+            None, 
+            save_document,
+            community_id,
+            title,
+            doc_type,
+            str(file_path),
+            visibility
         )
         
         return {
             "document_id": result["document_id"],
-            "chunks_inserted": result["chunks_inserted"]
+            "chunks_inserted": result["chunks_inserted"],
+            "status": "success",
+            "message": f"Document '{title}' uploaded and processed successfully"
         }
         
     except HTTPException:
@@ -518,4 +524,10 @@ if __name__ == "__main__":
     host = os.getenv("API_HOST", "0.0.0.0")
     port = int(os.getenv("API_PORT", "8000"))
     
-    uvicorn.run(app, host=host, port=port)
+    uvicorn.run(
+        app, 
+        host=host, 
+        port=port,
+        timeout_keep_alive=300,  # 5 minutes
+        timeout_graceful_shutdown=30
+    )
