@@ -1,0 +1,44 @@
+name: Deploy backend to prod
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH deploy
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+
+            # 1) Обновляем код на сервере
+            if [ ! -d /opt/hoa-assistant/back/.git ]; then
+              mkdir -p /opt/hoa-assistant
+              git clone git@github.com:gerrra/hoa-ai-assistant-back.git /opt/hoa-assistant/back
+            else
+              cd /opt/hoa-assistant/back
+              git fetch --all
+              git reset --hard origin/main
+            fi
+
+            # 2) Пересобрать и перезапустить только API
+            cd /opt/hoa-assistant/deploy/prod
+            docker compose -f docker-compose.prod.yml build api
+            docker compose -f docker-compose.prod.yml up -d api
+
+            # 3) Health-check на сервере
+            docker compose -f docker-compose.prod.yml exec -T api \
+              python -c 'import urllib.request;print(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5).read().decode())'
