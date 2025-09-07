@@ -3,8 +3,7 @@
 FastAPI application for HOA AI Assistant
 """
 
-from fastapi import Cookie, Depends, FastAPI, File, Form, HTTPException, Request, Response, UploadFile
-from starlette.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Request, Form, File, UploadFile, Response, Depends, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -49,12 +48,7 @@ app.add_middleware(
 )
 
 # Mount static files and templates
-from pathlib import Path
-STATIC_DIR = (Path(__file__).parent / "backend" / "static").resolve()
-if STATIC_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-else:
-    print(f"[WARN] static dir not found: {STATIC_DIR}; skipping static mount")
+app.mount("/static", StaticFiles(directory="backend/static"), name="static")
 templates = Jinja2Templates(directory="backend/templates")
 
 # Pydantic models
@@ -306,7 +300,7 @@ async def admin_upload(
             shutil.copyfileobj(file.file, buffer)
         
         # Import and call save_document
-        from ingest.save import save_document
+        from .ingest.save import save_document
         
         result = save_document(
             community_id=community_id,
@@ -475,7 +469,7 @@ async def admin_api_upload(
             buffer.write(file_content)
         
         # Import and call save_document
-        from ingest.save import save_document
+        from .ingest.save import save_document
         
         result = save_document(
             community_id=community_id,

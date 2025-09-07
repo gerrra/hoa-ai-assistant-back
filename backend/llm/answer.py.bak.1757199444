@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # Import local modules
-from search.retrieve import search_chunks, format_context
+from ..search.retrieve import search_chunks, format_context
 
 def get_openai_client():
     """Get OpenAI client with API key from environment"""
@@ -38,7 +38,7 @@ def answer_question(community_id: int, role: str, question: str, k: int = 6) -> 
     """
     try:
         # Step 1: Import search functions
-        from search.retrieve import search_chunks, format_context
+        from ..search.retrieve import search_chunks, format_context
         
         # Step 2: Search for relevant chunks
         chunks = search_chunks(community_id, question, k=k)
