@@ -30,31 +30,41 @@ jobs:
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host:     ${{ secrets.SSH_HOST }}
+          host:     ${{ steps.norm.outputs.host }}
+          port:     ${{ steps.norm.outputs.port }}
           username: ${{ secrets.SSH_USER }}
           key:      ${{ secrets.SSH_KEY }}
-          # port:   ${{ secrets.SSH_PORT }}   # если нужен нестандартный порт, раскомментируй
           script_stop: true
           command_timeout: 15m
           script: |
             set -euo pipefail
 
-            # код бэка
+            # 1) код
             if [ -d /opt/hoa-assistant/back/.git ]; then
-              cd /opt/hoa-assistant/back
-              git fetch --all
-              git reset --hard origin/main
+              cd /opt/hoa-assistant/back && git fetch --all && git reset --hard origin/main
             else
               mkdir -p /opt/hoa-assistant
               git clone git@github.com:gerrra/hoa-ai-assistant-back.git /opt/hoa-assistant/back
-              cd /opt/hoa-assistant/back
             fi
 
-            # билд и рестарт только API
+            # 2) билд и запуск API
             cd /opt/hoa-assistant/deploy/prod
             docker compose -f docker-compose.prod.yml build api
-            docker compose -f docker-compose.prod.yml up -d api
+            docker compose -f docker-compose.prod.yml up -d --wait api
 
-            # health
-            docker compose -f docker-compose.prod.yml exec -T api \
-              python -c 'import urllib.request;print(urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=5).read().decode())'
+            # 3) ОЖИДАНИЕ готовности /health (до ~90 сек, с ретраями)
+            i=0
+            until docker compose -f docker-compose.prod.yml exec -T api python - <<'PY'
+            import sys, time, urllib.request
+            try:
+                r = urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=3)
+                print(r.read().decode())
+                sys.exit(0)
+            except Exception as e:
+                sys.exit(1)
+            PY
+            do
+              i=$((i+1))
+              if [ $i -ge 30 ]; then echo "API not ready"; exit 1; fi
+              echo "waiting for API ($i/30)..." && sleep 3
+            done
