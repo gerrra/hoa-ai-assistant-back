@@ -21,6 +21,7 @@ from dotenv import load_dotenv
 
 # Import local modules
 from llm.answer import answer_question
+import chat as chat_mod
 
 # Load environment variables
 env_path = Path(__file__).parent.parent / '.env'
@@ -65,6 +66,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# SID cookie middleware
+from uuid import uuid4
+from fastapi import Request
+
+@app.middleware("http")
+async def ensure_sid_cookie(request: Request, call_next):
+    sid = request.cookies.get("sid")
+    new_sid = None
+    if not sid:
+        new_sid = str(uuid4())
+        request.state.sid = new_sid
+    else:
+        request.state.sid = sid
+    resp = await call_next(request)
+    if new_sid:
+        resp.set_cookie(
+            "sid", new_sid,
+            httponly=True, samesite="lax",
+            max_age=60*60*24*365,
+        )
+    return resp
+
 # Mount static files and templates
 from pathlib import Path
 STATIC_DIR = (Path(__file__).parent / "backend" / "static").resolve()
@@ -74,11 +97,16 @@ else:
     print(f"[WARN] static dir not found: {STATIC_DIR}; skipping static mount")
 templates = Jinja2Templates(directory="backend/templates")
 
+# Initialize chat module and include router
+chat_mod.init_chat(app)
+app.include_router(chat_mod.router, prefix="/chat", tags=["chat"])
+
 # Pydantic models
 class AskRequest(BaseModel):
     community_id: int = Field(..., gt=0, description="Community ID (must be positive)")
     role: Literal["resident", "board", "staff"] = Field(..., description="User role")
     question: str = Field(..., min_length=1, description="User question")
+    conversation_id: Optional[str] = Field(None, description="Optional conversation ID for chat history")
 
 class Source(BaseModel):
     title: str
@@ -146,15 +174,16 @@ def is_admin(admin_auth: str | None = Cookie(default=None)):
     raise HTTPException(status_code=401, detail="Unauthorized")
 
 @app.post("/ask", response_model=AskResponse)
-async def ask_question(request: AskRequest):
+async def ask_question(request: AskRequest, http_request: Request):
     """
     Ask a question to HOA AI Assistant
     
     Args:
-        request: AskRequest with community_id, role, and question
+        request: AskRequest with community_id, role, question, and optional conversation_id
+        http_request: HTTP request object for accessing session state
         
     Returns:
-        AskResponse with answer, sources, and confidence
+        AskResponse with answer, sources, confidence, and conversation_id
     """
     try:
         # Validate input (already done by Pydantic, but double-check)
@@ -164,6 +193,23 @@ async def ask_question(request: AskRequest):
         if request.community_id <= 0:
             raise HTTPException(status_code=400, detail="Community ID must be positive")
         
+        # If conversation_id is provided, save user message to chat history
+        if request.conversation_id:
+            try:
+                from chat import _exec
+                import uuid
+                _exec("""
+                    INSERT INTO messages(conversation_id, role, content, meta) 
+                    VALUES(%s, %s, %s, %s)
+                """, (
+                    uuid.UUID(request.conversation_id),
+                    "user",
+                    request.question,
+                    json.dumps({"community_id": request.community_id, "role": request.role})
+                ))
+            except Exception as e:
+                print(f"[warn] failed to save user message to chat history: {e}")
+        
         # Call answer_question function
         result = answer_question(
             community_id=request.community_id,
@@ -171,6 +217,32 @@ async def ask_question(request: AskRequest):
             question=request.question,
             k=6
         )
+        
+        # If conversation_id is provided, save assistant message to chat history
+        if request.conversation_id:
+            try:
+                from chat import _exec
+                import uuid
+                _exec("""
+                    INSERT INTO messages(conversation_id, role, content, meta) 
+                    VALUES(%s, %s, %s, %s)
+                """, (
+                    uuid.UUID(request.conversation_id),
+                    "assistant",
+                    result["answer"],
+                    json.dumps({
+                        "confidence": result["confidence"],
+                        "sources": result["sources"]
+                    })
+                ))
+                # Update conversation timestamp
+                _exec("""
+                    UPDATE conversations 
+                    SET updated_at=NOW() AT TIME ZONE 'UTC' 
+                    WHERE id=%s
+                """, (uuid.UUID(request.conversation_id),))
+            except Exception as e:
+                print(f"[warn] failed to save assistant message to chat history: {e}")
         
         # Log the Q&A interaction
         try:
