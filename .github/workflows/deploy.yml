@@ -27,11 +27,13 @@ jobs:
             *@*|*://*) echo "❌ SSH_HOST must be only IP or DNS, no user/protocol"; exit 1;;
           esac
 
+      - name: Debug SSH_HOST length
+        run: echo "len=$(printf '%s' '${{ secrets.SSH_HOST }}' | wc -c)"
+
       - name: SSH deploy
         uses: appleboy/ssh-action@v1.2.0
         with:
-          host:     ${{ steps.norm.outputs.host }}
-          port:     ${{ steps.norm.outputs.port }}
+          host:     ${{ steps.norm.SSH_HOST }}
           username: ${{ secrets.SSH_USER }}
           key:      ${{ secrets.SSH_KEY }}
           script_stop: true
