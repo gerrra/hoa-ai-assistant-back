@@ -9,3 +9,4 @@ jinja2
 python-multipart
 python-dotenv
 pgvector>=0.2.5
+syntok==1.4.4

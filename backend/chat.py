@@ -8,11 +8,23 @@ import psycopg
 router = APIRouter()
 
 def _dsn() -> str:
-    url = os.getenv("DB_URL")
+    """Get database connection string from environment"""
+    url = os.getenv("DATABASE_URL")
     if url:
         return url.replace("postgresql+psycopg://", "postgresql://")
-    host = os.getenv("DB_HOST","db"); port=os.getenv("DB_PORT","5432")
-    name = os.getenv("DB_NAME","hoa"); user=os.getenv("DB_USER","hoa"); pwd=os.getenv("DB_PASS","hoa")
+    
+    # Use localhost for local development, host.docker.internal for Docker
+    if os.path.exists('/.dockerenv'):
+        # Running in Docker container
+        host = os.getenv("DB_HOST", "host.docker.internal")
+    else:
+        # Running locally
+        host = os.getenv("DB_HOST", "localhost")
+    
+    port = os.getenv("DB_PORT", "5432")
+    name = os.getenv("DB_NAME", "hoa")
+    user = os.getenv("DB_USER", "hoa")
+    pwd = os.getenv("DB_PASS", "hoa")
     return f"postgresql://{user}:{pwd}@{host}:{port}/{name}"
 
 def _exec(sql: str, params: Optional[tuple]=None, fetch: bool=False, many: bool=False):
@@ -84,6 +96,21 @@ def _get_sid(request: Request) -> str:
     return sid
 
 # ------------ endpoints ------------
+@router.post("/new-session")
+def new_session(request: Request, response: Response):
+    """Create a completely new session and return new session ID"""
+    new_sid = str(uuid.uuid4())
+    _ensure_session(new_sid, request.headers.get("user-agent",""), request.client.host if request.client else None)
+    response.set_cookie(
+        key="sid",
+        value=new_sid,
+        max_age=60*60*24*365,  # 1 year
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax"
+    )
+    return {"session_id": new_sid, "message": "New session created"}
+
 @router.post("/start")
 def start_conv(body: StartBody, request: Request):
     sid = _get_sid(request)
@@ -91,7 +118,7 @@ def start_conv(body: StartBody, request: Request):
     cid = uuid.uuid4()
     _exec("INSERT INTO conversations(id, session_id, title) VALUES(%s,%s,%s)",
           (cid, uuid.UUID(sid), body.title))
-    return {"conversation_id": str(cid)}
+    return {"conversation_id": str(cid), "session_id": sid}
 
 @router.get("/list")
 def list_conversations(request: Request):
@@ -119,15 +146,40 @@ def get_messages(cid: str, limit: int = 100, after_id: Optional[int] = None, bef
         sql += " AND id < %s"; params.append(before_id)
     sql += " ORDER BY id ASC LIMIT %s"; params.append(max(1, min(limit, 500)))
     rows = _exec(sql, tuple(params), fetch=True)
-    return [{"id": r[0], "role": r[1], "content": r[2], "meta": r[3], "created_at": r[4]} for r in rows]
+    result = []
+    for r in rows:
+        meta = r[3] if r[3] else {}
+        db_role = r[1]  # роль из базы данных
+        
+        # Определяем правильную роль для API
+        if db_role == "assistant":
+            role = "assistant"
+        elif db_role == "user":
+            # Для пользователей всегда возвращаем "user", независимо от meta.role
+            role = "user"
+        else:
+            # Fallback: используем роль из meta, если она есть
+            role = meta.get("role", db_role) if isinstance(meta, dict) else db_role
+        
+        result.append({
+            "id": r[0], 
+            "role": role, 
+            "content": r[2], 
+            "meta": meta, 
+            "created_at": r[4]
+        })
+    return result
 
 @router.post("/{cid}/messages")
 def add_message(cid: str, body: MessageBody, request: Request):
     sid = _get_sid(request)
     owner = _exec("SELECT 1 FROM conversations WHERE id=%s AND session_id=%s", (uuid.UUID(cid), uuid.UUID(sid)), fetch=True)
     if not owner: raise HTTPException(404, "conversation not found")
+    
+    # Convert community role to chat role: 'resident' -> 'user'
+    chat_role = 'user' if body.role in ['resident', 'board', 'staff'] else body.role
     _exec("INSERT INTO messages(conversation_id,role,content,meta) VALUES(%s,%s,%s,%s)",
-          (uuid.UUID(cid), body.role, body.content, json.dumps(body.meta) if body.meta is not None else None))
+          (uuid.UUID(cid), chat_role, body.content, json.dumps(body.meta) if body.meta is not None else None))
     _exec("UPDATE conversations SET updated_at=NOW() AT TIME ZONE 'UTC' WHERE id=%s", (uuid.UUID(cid),))
     return {"ok": True}
 

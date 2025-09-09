@@ -18,11 +18,26 @@ CREATE TABLE IF NOT EXISTS documents (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- кусочки текста + вектор эмбеддинга
+-- топики документов (тематические разделы)
+CREATE TABLE IF NOT EXISTS topics (
+  id BIGSERIAL PRIMARY KEY,
+  document_id INT REFERENCES documents(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,                    -- название топика (например "Парковка", "Платежи")
+  description TEXT,                       -- краткое описание топика
+  content TEXT NOT NULL,                  -- весь контент топика из документа
+  embedding VECTOR(1536),                 -- эмбеддинг топика для поиска
+  token_count INT,                        -- количество токенов в топике
+  page_numbers TEXT,                      -- номера страниц, откуда взят контент (JSON array)
+  visibility TEXT DEFAULT 'resident',
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- кусочки текста + вектор эмбеддинга (оставляем для совместимости)
 -- длина вектора 1536 под text-embedding-3-small (можно изменить позже)
 CREATE TABLE IF NOT EXISTS chunks (
   id BIGSERIAL PRIMARY KEY,
   document_id INT REFERENCES documents(id) ON DELETE CASCADE,
+  topic_id INT REFERENCES topics(id) ON DELETE SET NULL,  -- связь с топиком
   section_ref TEXT,
   text TEXT,
   embedding VECTOR(1536),
@@ -45,5 +60,7 @@ CREATE TABLE IF NOT EXISTS qa_logs (
 -- индексы
 CREATE INDEX IF NOT EXISTS idx_documents_community ON documents(community_id);
 CREATE INDEX IF NOT EXISTS idx_chunks_document ON chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_topics_document ON topics(document_id);
+CREATE INDEX IF NOT EXISTS idx_chunks_topic ON chunks(topic_id);
 
 -- если доступен HNSW/IVFFLAT для pgvector, можно добавить специализированный индекс позже

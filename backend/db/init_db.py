@@ -11,7 +11,7 @@ import psycopg
 
 def load_env():
     """Load environment variables from .env file"""
-    env_path = Path(__file__).parent.parent.parent / '.env'
+    env_path = Path('/app/.env')
     load_dotenv(env_path)
     
     # First try to get DATABASE_URL

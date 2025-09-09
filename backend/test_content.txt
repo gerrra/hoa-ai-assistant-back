@@ -1,0 +1,1 @@
+This is a test PDF content for topic segmentation. It contains multiple paragraphs that should be grouped into topics based on their semantic similarity. The first topic discusses general information about HOA rules and regulations. The second topic covers parking policies and restrictions. The third topic explains maintenance responsibilities and procedures.

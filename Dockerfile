@@ -14,6 +14,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY backend/ .
 
+# Copy environment file
+COPY .env .
+
 # Create data directory
 RUN mkdir -p data
 

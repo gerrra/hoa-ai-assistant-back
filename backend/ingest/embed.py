@@ -21,7 +21,7 @@ def get_embedding(text: str) -> List[float]:
         List of floats (vector of length 1536)
     """
     # Load environment variables
-    env_path = Path(__file__).parent.parent.parent / '.env'
+    env_path = Path('/app/.env')
     load_dotenv(env_path)
     
     # Get API key
